@@ -15,7 +15,7 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -23,6 +23,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+
+      # Virtuelni ekran za Chrome, koji se koristi ako Cloudflare traži proveru.
+      - run: command -v Xvfb || (sudo apt-get update && sudo apt-get install -y xvfb)
 
       - run: pip install -r requirements.txt
 

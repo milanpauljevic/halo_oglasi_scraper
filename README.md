@@ -55,7 +55,10 @@ Novo okruženje: `python -m venv .venv` pa `.\.venv\Scripts\pip install -r requi
 ## Napomene
 
 - GitHub cron nije precizan; kašnjenje od 5–15 min je normalno.
-- Ako workflow počne da pada sa `HTTP 403`, HaloOglasi blokira GitHub servere. Tada pokreći skriptu
+- HaloOglasi je iza Cloudflare zaštite. Sa kućnog interneta skripta radi direktno, a sa GitHub servera
+  Cloudflare traži JS proveru, pa skripta automatski pokreće pravi Chrome (SeleniumBase UC režim) da je reši.
+  Lokalno možeš da testiraš taj režim sa `$env:FORCE_BROWSER="1"`.
+- Ako i Chrome ne prođe proveru („Ni pravi browser nije prošao Cloudflare proveru“), pokreći skriptu
   lokalno preko Windows Task Scheduler-a (radi samo dok računar nije u sleep modu).
 - Ako dobiješ grešku „nijedan oglas nije pročitan“, HaloOglasi je promenio izgled stranice i parser
   u `scraper.py` treba ažurirati.

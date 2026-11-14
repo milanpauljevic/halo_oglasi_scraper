@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .env
+downloaded_files/
+latest_logs/
+archived_logs/

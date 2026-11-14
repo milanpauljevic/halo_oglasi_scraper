@@ -136,31 +136,99 @@ def describe_block(resp) -> str:
     return ", ".join(info)
 
 
-def fetch(session, url: str) -> str:
-    last_error = None
-    for attempt in range(3):
-        try:
-            resp = session.get(url, headers=HEADERS, timeout=30)
-            if resp.status_code == 200:
-                return resp.text
-            last_error = describe_block(resp)
-            print(f"Pokušaj {attempt + 1}: {last_error}")
-        except Exception as exc:
-            last_error = str(exc)
-            print(f"Pokušaj {attempt + 1}: {last_error}")
-        time.sleep(5 * (attempt + 1))
-    raise RuntimeError(f"Neuspešno preuzimanje {url}: {last_error}")
+def is_challenge(resp) -> bool:
+    return resp.status_code in (403, 503) and (
+        resp.headers.get("cf-mitigated") == "challenge" or "Just a moment" in (resp.text or "")
+    )
+
+
+class PageFetcher:
+    """Preuzima stranice brzo preko curl_cffi; ako Cloudflare traži JS proveru (npr. sa GitHub
+    servera), prelazi na pravi Chrome (SeleniumBase UC režim) koji tu proveru rešava."""
+
+    def __init__(self):
+        self.session = browser_requests.Session(impersonate=IMPERSONATE)
+        self._sb_cm = None
+        self.sb = None
+        if os.environ.get("FORCE_BROWSER") == "1":
+            self._start_browser()
+
+    def get(self, url: str) -> str:
+        if self.sb is None:
+            html_text = self._get_http(url)
+            if html_text is not None:
+                return html_text
+            print("Cloudflare traži proveru — prelazim na pravi Chrome browser.")
+            self._start_browser()
+        return self._get_browser(url)
+
+    def _get_http(self, url: str):
+        last_error = None
+        for attempt in range(3):
+            try:
+                resp = self.session.get(url, headers=HEADERS, timeout=30)
+                if resp.status_code == 200:
+                    return resp.text
+                last_error = describe_block(resp)
+                print(f"Pokušaj {attempt + 1}: {last_error}")
+                if is_challenge(resp):
+                    return None
+            except Exception as exc:
+                last_error = str(exc)
+                print(f"Pokušaj {attempt + 1}: {last_error}")
+            time.sleep(5 * (attempt + 1))
+        raise RuntimeError(f"Neuspešno preuzimanje {url}: {last_error}")
+
+    def _start_browser(self):
+        from seleniumbase import SB
+
+        # xvfb: na Linux serveru bez ekrana pokreće virtuelni ekran, jer headless Chrome Cloudflare lakše prepozna.
+        self._sb_cm = SB(uc=True, xvfb=True, locale="sr")
+        self.sb = self._sb_cm.__enter__()
+
+    def _get_browser(self, url: str) -> str:
+        sb = self.sb
+        for attempt in range(3):
+            sb.uc_open_with_reconnect(url, 5)
+            if self._passed():
+                return sb.get_page_source()
+            print(f"Browser pokušaj {attempt + 1}: provera nije prošla, klikćem na Cloudflare polje...")
+            try:
+                sb.uc_gui_click_captcha()
+            except Exception as exc:
+                print(f"  klik nije uspeo: {exc}")
+            for _ in range(15):
+                if self._passed():
+                    return sb.get_page_source()
+                time.sleep(1)
+        raise RuntimeError(f"Ni pravi browser nije prošao Cloudflare proveru za {url} (naslov: {sb.get_title()!r})")
+
+    def _passed(self) -> bool:
+        title = self.sb.get_title() or ""
+        return "Just a moment" not in title and "QuidditaEnvironment" in self.sb.get_page_source()
+
+    def close(self):
+        if self._sb_cm is not None:
+            self._sb_cm.__exit__(None, None, None)
+            self._sb_cm = self.sb = None
 
 
 def scrape(cfg: dict) -> list[dict]:
-    session = browser_requests.Session(impersonate=IMPERSONATE)
+    fetcher = PageFetcher()
+    try:
+        return _scrape(cfg, fetcher)
+    finally:
+        fetcher.close()
+
+
+def _scrape(cfg: dict, fetcher: PageFetcher) -> list[dict]:
     delay = cfg.get("pauza_sekunde", 2)
     max_pages = cfg.get("max_strana", 30)
     results: dict[str, dict] = {}
     page, pages = 1, 1
     while page <= min(pages, max_pages):
         url = build_search_url(cfg, page)
-        page_html = fetch(session, url)
+        page_html = fetcher.get(url)
         listings = parse_listings(page_html)
         if page == 1:
             pages = total_pages(page_html)
