@@ -1,0 +1,22 @@
+# Filteri za pretragu stanova za izdavanje na HaloOglasi.
+# Posle izmene samo commit-uj fajl — sledeće pokretanje koristi nove vrednosti.
+
+grad: beograd              # deo URL-a, npr. beograd, novi-sad
+lokacija: novi-beograd     # opština kao u URL-u HaloOglasi (beograd-novi-beograd); prazno = ceo grad
+
+cena_max: 600              # EUR; null = bez ograničenja
+cena_min: null             # EUR
+
+sobe_min: 2.0              # dozvoljeno: 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0; null = bez ograničenja
+sobe_max: null
+
+# Oglasi čija lokacija sadrži neku od ovih celih reči se preskaču (ne razlikuje velika/mala slova i kvačice).
+iskljuci_lokacije:
+  - Ledine
+  - Surčin
+
+# Oglasi čiji naslov ili opis sadrži neku od ovih reči se preskaču, npr. "agencija".
+iskljuci_reci: []
+
+max_strana: 30             # zaštita od beskonačnog listanja
+pauza_sekunde: 2           # pauza između zahteva ka sajtu
