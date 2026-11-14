@@ -1,4 +1,5 @@
 import html
+import re
 import time
 
 import requests
@@ -8,8 +9,24 @@ API = "https://api.telegram.org/bot{token}/{method}"
 
 class TelegramNotifier:
     def __init__(self, token: str, chat_id: str):
-        self.token = token
-        self.chat_id = chat_id
+        # Token nikad ne sadrži razmake; uklanjamo ih ako su se ubacili pri kopiranju sa telefona.
+        self.token = re.sub(r"\s", "", token)
+        self.chat_id = chat_id.strip()
+
+    def check(self) -> None:
+        """Proverava token i chat id pre skrejpovanja, sa jasnom porukom šta ne valja."""
+        resp = requests.get(API.format(token=self.token, method="getMe"), timeout=30)
+        if resp.status_code == 401 or resp.status_code == 404:
+            raise RuntimeError(
+                "TELEGRAM_BOT_TOKEN nije ispravan (Telegram: Unauthorized). Kopiraj ceo token od @BotFather-a, "
+                "u obliku 123456789:AAH..., bez razmaka, navodnika i bez reči 'bot' ispred."
+            )
+        resp = requests.post(API.format(token=self.token, method="getChat"), data={"chat_id": self.chat_id}, timeout=30)
+        if not resp.json().get("ok"):
+            raise RuntimeError(
+                f"TELEGRAM_CHAT_ID nije ispravan ({resp.json().get('description')}). Proveri broj od @userinfobot "
+                "i da si svom botu poslao /start."
+            )
 
     def _call(self, method: str, payload: dict) -> dict:
         for attempt in range(3):

@@ -18,6 +18,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Uvek najnoviji main (i kod "Re-run jobs"), da seen.json i kod budu aktuelni.
+          ref: ${{ github.ref }}
 
       - uses: actions/setup-python@v5
         with:
@@ -44,6 +47,7 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add seen.json
             git commit -m "Ažuriran seen.json"
-            git pull --rebase --autostash
+            # Pri sudaru zadrži seen.json iz ovog pokretanja (on je nadskup onog na GitHub-u).
+            git pull --rebase -X theirs
             git push
           fi

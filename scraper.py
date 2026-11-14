@@ -307,6 +307,11 @@ def main() -> int:
             print("Greška: postavi TELEGRAM_BOT_TOKEN i TELEGRAM_CHAT_ID (ili koristi --dry-run).")
             return 2
         notifier = TelegramNotifier(token, chat_id)
+        try:
+            notifier.check()
+        except RuntimeError as exc:
+            print(f"Greška: {exc}")
+            return 2
         if args.test_telegram:
             notifier.send_text("✅ HaloOglasi skrejper je povezan sa Telegramom.")
             print("Probna poruka poslata.")
