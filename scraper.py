@@ -144,10 +144,15 @@ def is_challenge(resp) -> bool:
 
 class PageFetcher:
     """Preuzima stranice brzo preko curl_cffi; ako Cloudflare traži JS proveru (npr. sa GitHub
-    servera), prelazi na pravi Chrome (SeleniumBase UC režim) koji tu proveru rešava."""
+    servera), prelazi na pravi Chrome (SeleniumBase UC režim) koji tu proveru rešava.
+    Ako je postavljen PROXY_URL, svi zahtevi ka sajtu idu preko tog proxy-ja."""
 
     def __init__(self):
-        self.session = browser_requests.Session(impersonate=IMPERSONATE)
+        self.proxy = os.environ.get("PROXY_URL", "").strip() or None
+        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+        self.session = browser_requests.Session(impersonate=IMPERSONATE, proxies=proxies)
+        if self.proxy:
+            print(f"Koristim proxy: {self.proxy.rsplit('@', 1)[-1]}")
         self._sb_cm = None
         self.sb = None
         if os.environ.get("FORCE_BROWSER") == "1":
@@ -164,6 +169,7 @@ class PageFetcher:
 
     def _get_http(self, url: str):
         last_error = None
+        challenged = False
         for attempt in range(3):
             try:
                 resp = self.session.get(url, headers=HEADERS, timeout=30)
@@ -172,18 +178,25 @@ class PageFetcher:
                 last_error = describe_block(resp)
                 print(f"Pokušaj {attempt + 1}: {last_error}")
                 if is_challenge(resp):
-                    return None
+                    challenged = True
+                    # Bez proxy-ja ponavljanje ne pomaže; rotirajući proxy sledeći put daje novu IP adresu.
+                    if not self.proxy:
+                        return None
             except Exception as exc:
                 last_error = str(exc)
                 print(f"Pokušaj {attempt + 1}: {last_error}")
             time.sleep(5 * (attempt + 1))
+        if challenged:
+            return None
         raise RuntimeError(f"Neuspešno preuzimanje {url}: {last_error}")
 
     def _start_browser(self):
         from seleniumbase import SB
 
         # xvfb: na Linux serveru bez ekrana pokreće virtuelni ekran, jer headless Chrome Cloudflare lakše prepozna.
-        self._sb_cm = SB(uc=True, xvfb=True, locale="sr")
+        # SeleniumBase očekuje proxy bez "http://" (korisnik:lozinka@host:port).
+        sb_proxy = re.sub(r"^https?://", "", self.proxy) if self.proxy else None
+        self._sb_cm = SB(uc=True, xvfb=True, locale="sr", proxy=sb_proxy)
         self.sb = self._sb_cm.__enter__()
 
     def _get_browser(self, url: str) -> str:

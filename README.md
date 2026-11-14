@@ -30,9 +30,24 @@ Filteri su u [config.yaml](config.yaml): Novi Beograd, do 600 €, 2.0+ sobe, be
 3. U repou: **Settings → Secrets and variables → Actions → New repository secret**, dodaj:
    - `TELEGRAM_BOT_TOKEN` — token od BotFather-a
    - `TELEGRAM_CHAT_ID` — tvoj chat id
+   - `PROXY_URL` — adresa proxy-ja (vidi ispod)
 4. **Actions** tab → *HaloOglasi skrejper* → **Run workflow** da ga odmah pokreneš.
    Prvo pokretanje samo zapamti postojeće oglase i pošalje poruku „Praćenje pokrenuto“.
    Posle toga stižu samo novi oglasi.
+
+## Proxy (obavezan za GitHub)
+
+HaloOglasi je iza Cloudflare zaštite koja blokira GitHub servere (i pravi Chrome), a pušta kućne IP adrese.
+Zato na GitHub-u zahtevi idu preko **rezidencijalnog proxy-ja** (nečija kućna IP adresa).
+
+1. Otvori nalog kod provajdera rezidencijalnih proxy-ja koji naplaćuje po GB (npr. DataImpulse, ~1 $/GB).
+   Skripta troši oko 0,1–0,5 GB mesečno.
+2. U njihovom panelu uzmi podatke za pristup: host, port, korisničko ime i lozinku. Izaberi **rotirajuće**
+   IP adrese, po želji iz Srbije.
+3. Dodaj GitHub secret `PROXY_URL` u obliku `http://korisnik:lozinka@host:port`.
+
+Ako `PROXY_URL` nije postavljen, skripta ide direktno (to radi sa kućnog interneta).
+Lokalni test proxy-ja: `$env:PROXY_URL="http://korisnik:lozinka@host:port"; .\.venv\Scripts\python.exe scraper.py --dry-run`
 
 ## Izmena filtera
 
@@ -55,11 +70,10 @@ Novo okruženje: `python -m venv .venv` pa `.\.venv\Scripts\pip install -r requi
 ## Napomene
 
 - GitHub cron nije precizan; kašnjenje od 5–15 min je normalno.
-- HaloOglasi je iza Cloudflare zaštite. Sa kućnog interneta skripta radi direktno, a sa GitHub servera
-  Cloudflare traži JS proveru, pa skripta automatski pokreće pravi Chrome (SeleniumBase UC režim) da je reši.
-  Lokalno možeš da testiraš taj režim sa `$env:FORCE_BROWSER="1"`.
-- Ako i Chrome ne prođe proveru („Ni pravi browser nije prošao Cloudflare proveru“), pokreći skriptu
-  lokalno preko Windows Task Scheduler-a (radi samo dok računar nije u sleep modu).
+- HaloOglasi je iza Cloudflare zaštite. Ako i pored proxy-ja stigne Cloudflare provera, skripta pokušava
+  sa drugom IP adresom, a zatim pokreće pravi Chrome (SeleniumBase UC režim) preko istog proxy-ja.
+  Lokalno možeš da testiraš Chrome režim sa `$env:FORCE_BROWSER="1"`.
+- Kad ti skrejper više ne treba: **Actions → HaloOglasi skrejper → „…“ → Disable workflow**.
 - Ako dobiješ grešku „nijedan oglas nije pročitan“, HaloOglasi je promenio izgled stranice i parser
   u `scraper.py` treba ažurirati.
 - `seen.json` čuva ID-jeve viđenih oglasa (stariji od 120 dana se brišu).
