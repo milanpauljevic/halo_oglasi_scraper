@@ -11,9 +11,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 
-import requests
 import yaml
 from bs4 import BeautifulSoup
+from curl_cffi import requests as browser_requests
 
 from notifier import TelegramNotifier
 
@@ -22,13 +22,10 @@ ROOT = Path(__file__).resolve().parent
 SEEN_FILE = ROOT / "seen.json"
 SEEN_RETENTION_DAYS = 120
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-    ),
-    "Accept-Language": "sr-RS,sr;q=0.9,en;q=0.8",
-}
+# curl_cffi oponaša pravi Chrome (TLS otisak i zaglavlja), pa User-Agent ne postavljamo ručno
+# jer bi se razlikovao od otiska koji Cloudflare vidi.
+IMPERSONATE = "chrome"
+HEADERS = {"Accept-Language": "sr-RS,sr;q=0.9,en;q=0.8"}
 
 # HaloOglasi u URL-u koristi redni broj opcije, a ne sam broj soba.
 ROOMS_ORDER = {0.5: 1, 1.0: 2, 1.5: 3, 2.0: 4, 2.5: 5, 3.0: 7, 3.5: 8, 4.0: 9, 4.5: 10, 5.0: 11}
@@ -126,22 +123,37 @@ def total_count(page_html: str):
     return int(m.group(1)) if m else None
 
 
-def fetch(session: requests.Session, url: str) -> str:
+def describe_block(resp) -> str:
+    """Kratak opis odbijenog odgovora, da se u logu vidi ko i zašto blokira."""
+    h = resp.headers
+    info = [f"HTTP {resp.status_code}", f"server={h.get('server')}"]
+    for key in ("cf-ray", "cf-mitigated"):
+        if h.get(key):
+            info.append(f"{key}={h.get(key)}")
+    title = re.search(r"<title>(.*?)</title>", resp.text or "", re.S | re.I)
+    if title:
+        info.append(f"title={title.group(1).strip()[:80]!r}")
+    return ", ".join(info)
+
+
+def fetch(session, url: str) -> str:
     last_error = None
     for attempt in range(3):
         try:
             resp = session.get(url, headers=HEADERS, timeout=30)
             if resp.status_code == 200:
                 return resp.text
-            last_error = f"HTTP {resp.status_code}"
-        except requests.RequestException as exc:
+            last_error = describe_block(resp)
+            print(f"Pokušaj {attempt + 1}: {last_error}")
+        except Exception as exc:
             last_error = str(exc)
+            print(f"Pokušaj {attempt + 1}: {last_error}")
         time.sleep(5 * (attempt + 1))
     raise RuntimeError(f"Neuspešno preuzimanje {url}: {last_error}")
 
 
 def scrape(cfg: dict) -> list[dict]:
-    session = requests.Session()
+    session = browser_requests.Session(impersonate=IMPERSONATE)
     delay = cfg.get("pauza_sekunde", 2)
     max_pages = cfg.get("max_strana", 30)
     results: dict[str, dict] = {}
